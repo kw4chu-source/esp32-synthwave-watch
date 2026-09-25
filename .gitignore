@@ -1,0 +1,12 @@
+# Arduino CLI build output
+build/
+*.bin
+!data/*.bin
+
+# esptool/build artifacts
+*.elf
+*.map
+
+# OS cruft
+.DS_Store
+Thumbs.db
