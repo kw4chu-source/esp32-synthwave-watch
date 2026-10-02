@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "author": "kw4chu",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "chip-ili9488", "id": "tft1", "top": -80, "left": 220, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:GND.1", "tft1:GND", "black", [] ],
+    [ "esp:5V", "tft1:VCC", "red", [] ],
+    [ "esp:15", "tft1:CS", "purple", [] ],
+    [ "esp:2", "tft1:DC", "green", [] ],
+    [ "esp:4", "tft1:RST", "blue", [] ],
+    [ "esp:23", "tft1:MOSI", "yellow", [] ],
+    [ "esp:18", "tft1:SCK", "orange", [] ],
+    [ "esp:32", "tft1:BL", "white", [] ]
+  ],
+  "dependencies": {}
+}

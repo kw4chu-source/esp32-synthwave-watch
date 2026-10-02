@@ -1,0 +1,1 @@
+{"name": "ILI9488", "author": "Wokwi Custom Chip", "pins": ["VCC", "GND", "CS", "RST", "DC", "MOSI", "SCK", "BL", "", ""], "display": {"width": 320, "height": 480}}

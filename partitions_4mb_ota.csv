@@ -1,0 +1,7 @@
+# Wspolna tabela partycji dla projektow WROOM z wroom_link (4 MB flash)
+# factory = loader (etap 2), ota_0 = wlasciwy projekt (tu: zegarek)
+# Name,    Type, SubType, Offset,   Size
+nvs,       data, nvs,     0x9000,   0x5000
+otadata,   data, ota,     0xE000,   0x2000
+factory,   app,  factory, 0x10000,  0x100000
+ota_0,     app,  ota_0,   0x110000, 0x2E0000

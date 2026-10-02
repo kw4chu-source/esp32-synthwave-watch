@@ -1,0 +1,7 @@
+{
+  "name": "wroom_link",
+  "version": "0.1.0",
+  "description": "ESP-NOW link Cardputer <-> projekty ESP32 WROOM (discover, przejscie do loadera)",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}

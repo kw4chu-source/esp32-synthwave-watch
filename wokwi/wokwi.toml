@@ -1,0 +1,11 @@
+[wokwi]
+version = 1
+# Obraz z tools/post_build.py: bootloader + partycje + app w FACTORY (0x10000).
+# Uklad z app tylko w ota_0 wpada w Wokwi w petle resetow (QEMU startuje
+# z ota_0 poprawnie), wiec logike testujemy w factory.
+firmware = "../.pio/build/watch/wokwi.bin"
+elf = "../.pio/build/watch/firmware.elf"
+
+[[chip]]
+name = 'ili9488'
+binary = 'ili9488.chip.wasm'

@@ -1,11 +1,22 @@
-# Arduino CLI build output
-build/
-*.bin
-!data/*.bin
+# PlatformIO
+.pio/
+.vscode/
 
-# esptool/build artifacts
+# Gotowe obrazy app .bin (eksport post-build)
+dist/
+
+# Dane Wi-Fi - tylko lokalnie, wzor w include/secrets.h.example
+include/secrets.h
+
+# Stary build Arduino CLI
+build/
 *.elf
 *.map
+
+# Python
+__pycache__/
+*.pyc
+.venv/
 
 # OS cruft
 .DS_Store
