@@ -3,7 +3,7 @@
 // w tym czasie leci po SPI. Wspolne dla siatki i dirty rectow.
 
 #include <stdint.h>
-#include "display/lgfx_config.h"
+#include "core/lgfx_config.h"
 
 class DmaBuffers {
 public:

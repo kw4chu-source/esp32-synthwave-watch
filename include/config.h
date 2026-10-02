@@ -1,5 +1,6 @@
 #pragma once
-// Wspolna konfiguracja zegarka: piny, geometria ekranu, czasy.
+// Wspolna konfiguracja szkieletu: piny, ekran, czasy.
+// Geometria konkretnej tarczy: src/faces/<nazwa>/face_config.h
 
 #include <stdint.h>
 
@@ -19,13 +20,6 @@ constexpr uint32_t TFT_SPI_READ_HZ  = 16000000;
 // ---- Geometria (landscape 480x320) ----
 constexpr int SCREEN_W = 480;
 constexpr int SCREEN_H = 320;
-
-constexpr int DATE_TOP    = 0;     // pas daty: y 0-40
-constexpr int DATE_BOTTOM = 40;
-constexpr int HORIZON_Y   = 220;   // horyzont, srodek slonca
-constexpr int GRID_TOP    = HORIZON_Y;
-constexpr int GRID_H      = SCREEN_H - GRID_TOP;  // siatka y 220-320
-constexpr int SIDE_W      = 75;    // boki na animacje (poza pasem cyfr)
 
 // ---- Klatki ----
 // Obecny zegarek: 11 FPS (limit SPI). Trzymamy ten poziom, nie podnosimy.

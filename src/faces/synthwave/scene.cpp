@@ -1,7 +1,7 @@
 #include "scene.h"
 
 #include <string.h>
-#include "pixel.h"
+#include "core/pixel.h"
 
 using namespace assets;
 

@@ -1,4 +1,4 @@
-// ESP32 Synthwave Watch v2 (PlatformIO)
+// Szkielet zegarka ESP32 WROOM + ILI9488 (wspolny dla wszystkich tarcz)
 // Render na rdzeniu 1 (loop), NTP/Wi-Fi w osobnym zadaniu na rdzeniu 0.
 
 #include <Arduino.h>
@@ -8,10 +8,10 @@
 #include <time.h>
 
 #include "config.h"
-#include "display/lgfx_config.h"
-#include "net/wifi_fetch.h"
-#include "render/animator.h"
-#include "render/dma_buffers.h"
+#include "core/lgfx_config.h"
+#include "core/wifi_fetch.h"
+#include "core/face.h"
+#include "core/dma_buffers.h"
 #include "secrets.h"
 #include <WroomLink.h>
 
@@ -44,9 +44,9 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WroomLink::begin(APP_NAME, APP_VERSION, LINK_DEFAULT_CHANNEL, WROOM_LINK_KEY);
 
-  animator::begin();
+  face::begin();
   lcd.startWrite();
-  animator::drawAll();
+  face::drawAll();
   lcd.endWrite();
 
   ntpTaskStart();
@@ -66,7 +66,7 @@ void loop() {
   }
 
   lcd.startWrite();
-  animator::frame(t0, valid ? &now : nullptr);
+  face::frame(t0, valid ? &now : nullptr);
   lcd.endWrite();
 
   WroomLink::poll();

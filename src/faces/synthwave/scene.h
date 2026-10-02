@@ -5,8 +5,8 @@
 // tylko swojego prostokata, tlo pod spodem odtwarza sie samo.
 
 #include <stdint.h>
-#include "assets/assets_gen.h"
-#include "config.h"
+#include "assets_gen.h"
+#include "face_config.h"
 
 class Scene {
 public:

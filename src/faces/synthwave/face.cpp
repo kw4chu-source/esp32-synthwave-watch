@@ -1,17 +1,17 @@
-#include "animator.h"
+#include "core/face.h"
 
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
-#include "config.h"
-#include "dma_buffers.h"
+#include "core/dma_buffers.h"
+#include "core/pixel.h"
+#include "face_config.h"
 #include "grid.h"
-#include "pixel.h"
 #include "scene.h"
 
 using namespace assets;
 
-namespace animator {
+namespace face {
 namespace {
 
 constexpr float GRID_SPEED = 0.9f;            // jednostki glebokosci na sekunde
@@ -175,4 +175,4 @@ void frame(uint32_t nowMs, const struct tm* now) {
   grid::render(gridScroll);
 }
 
-}  // namespace animator
+}  // namespace face

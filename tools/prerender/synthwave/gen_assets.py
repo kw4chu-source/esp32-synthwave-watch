@@ -2,11 +2,11 @@
 
 Jedno zrodlo prawdy dla wygladu sceny: geometria, kolory, cyfry z glow,
 atlas daty, tabele slonca, gwiazdy. Wynik:
-  src/assets/assets_gen.h / assets_gen.cpp  - dane dla ESP32 (const, we flashu)
-  tools/prerender/out/preview.png            - podglad calej klatki (RGB565 +
+  src/faces/synthwave/assets_gen.h / .cpp  - dane dla ESP32 (const, we flashu)
+  tools/prerender/synthwave/out/preview.png            - podglad calej klatki (RGB565 +
                                                dithering, jak na ekranie)
 
-Uruchomienie:  python tools/prerender/gen_assets.py
+Uruchomienie:  python tools/prerender/synthwave/gen_assets.py
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageFont
 
-ROOT = Path(__file__).resolve().parents[2]
-FONTS = Path(__file__).parent / "fonts"
-OUT_SRC = ROOT / "src" / "assets"
+ROOT = Path(__file__).resolve().parents[3]
+FONTS = Path(__file__).parents[1] / "fonts"
+OUT_SRC = ROOT / "src" / "faces" / "synthwave"
 OUT_PREVIEW = Path(__file__).parent / "out"
 
 # ---------------------------------------------------------------- scena

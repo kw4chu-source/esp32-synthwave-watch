@@ -1,10 +1,10 @@
 #include "grid.h"
 
 #include <math.h>
-#include "assets/assets_gen.h"
-#include "config.h"
-#include "dma_buffers.h"
-#include "pixel.h"
+#include "assets_gen.h"
+#include "core/dma_buffers.h"
+#include "core/pixel.h"
+#include "face_config.h"
 
 namespace grid {
 namespace {
