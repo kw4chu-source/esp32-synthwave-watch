@@ -24,3 +24,4 @@ Thumbs.db
 
 # Podglady z prerenderu (generowane)
 tools/prerender/*/out/
+tools/prerender/fonts/NotoSansJP.ttf
