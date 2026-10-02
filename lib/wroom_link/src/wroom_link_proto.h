@@ -1,8 +1,10 @@
 #pragma once
 // Protokol ESP-NOW Cardputer <-> projekty WROOM.
-// Format ustalony od poczatku, zeby pelna wersja (etap 4) nie zmieniala ramek.
+// Wspolny dla obu stron (Cardputer linkuje ta sama biblioteke).
 
 #include <stdint.h>
+#include <string.h>
+#include <mbedtls/md.h>
 
 namespace wroom_link {
 
@@ -15,8 +17,9 @@ enum class MsgType : uint8_t {
   DiscoverReply = 0x02,  // WROOM -> Cardputer: nazwa + wersja
   CmdLoader     = 0x10,  // Cardputer -> WROOM: przejdz do loadera (HMAC)
   Ack           = 0x11,
-  Nack          = 0x12,
 };
+
+enum AckCode : uint8_t { ACK_OK = 0, ACK_BAD_HMAC = 1, ACK_REPLAY = 2 };
 
 struct __attribute__((packed)) Header {
   uint8_t magic[2];
@@ -35,7 +38,7 @@ struct __attribute__((packed)) DiscoverReplyMsg {
   char version[32];
 };
 
-// HMAC-SHA256(klucz, header || nonce || mac_odbiorcy)
+// hmac = HMAC-SHA256(klucz, header || nonce || MAC odbiorcy)
 struct __attribute__((packed)) CmdLoaderMsg {
   Header h;
   uint32_t nonce;
@@ -48,8 +51,29 @@ struct __attribute__((packed)) AckMsg {
   uint8_t code;
 };
 
+inline Header makeHeader(MsgType type, uint32_t seq) {
+  return Header{{MAGIC0, MAGIC1}, PROTO_VERSION, type, seq};
+}
+
 inline bool headerValid(const Header& h) {
   return h.magic[0] == MAGIC0 && h.magic[1] == MAGIC1 && h.proto == PROTO_VERSION;
+}
+
+inline void cmdLoaderHmac(const char* key, const CmdLoaderMsg& m, const uint8_t target[6],
+                          uint8_t out[32]) {
+  uint8_t buf[sizeof(Header) + sizeof(uint32_t) + 6];
+  memcpy(buf, &m.h, sizeof(Header));
+  memcpy(buf + sizeof(Header), &m.nonce, sizeof(uint32_t));
+  memcpy(buf + sizeof(Header) + sizeof(uint32_t), target, 6);
+  mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
+                  reinterpret_cast<const uint8_t*>(key), strlen(key), buf, sizeof(buf), out);
+}
+
+// Porownanie w stalym czasie
+inline bool hmacEqual(const uint8_t a[32], const uint8_t b[32]) {
+  uint8_t d = 0;
+  for (int i = 0; i < 32; i++) d |= a[i] ^ b[i];
+  return d == 0;
 }
 
 }  // namespace wroom_link

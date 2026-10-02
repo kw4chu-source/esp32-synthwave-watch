@@ -12,6 +12,7 @@
 #include "net/wifi_fetch.h"
 #include "render/animator.h"
 #include "render/dma_buffers.h"
+#include "secrets.h"
 #include <WroomLink.h>
 
 LGFX lcd;
@@ -41,7 +42,7 @@ void setup() {
 
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WroomLink::begin(APP_NAME, APP_VERSION, LINK_DEFAULT_CHANNEL);
+  WroomLink::begin(APP_NAME, APP_VERSION, LINK_DEFAULT_CHANNEL, WROOM_LINK_KEY);
 
   animator::begin();
   lcd.startWrite();
