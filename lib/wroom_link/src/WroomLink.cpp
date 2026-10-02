@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_mac.h>
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -55,8 +56,10 @@ bool WroomLink::begin(const char* appName, const char* appVersion, uint8_t chann
   }
   esp_now_register_recv_cb(onRecv);
 
-  Serial.printf("[LINK] ESP-NOW nasluch, kanal %u, %s %s, MAC %s\n",
-                s_channel, s_name, s_version, WiFi.macAddress().c_str());
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  Serial.printf("[LINK] ESP-NOW nasluch, kanal %u, %s %s, MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
+                s_channel, s_name, s_version, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   return true;
 }
 
