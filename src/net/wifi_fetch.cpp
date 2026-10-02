@@ -12,6 +12,7 @@
 namespace {
 
 constexpr uint32_t NTP_RETRY_MS = 10UL * 60UL * 1000UL;  // po porazce: 10 min
+constexpr uint32_t NTP_FIRST_RETRY_MS = 60UL * 1000UL;   // ...albo 1 min, gdy brak czasu
 constexpr uint32_t NTP_SYNC_TIMEOUT_MS = 10000;
 
 bool syncNtp() {
@@ -36,7 +37,9 @@ void ntpTask(void*) {
     const bool ok = wifiFetch(syncNtp);
     Serial.printf("[NTP] %s (%lu ms)\n", ok ? "zsynchronizowano" : "nieudane",
                   (unsigned long)(millis() - t0));
-    vTaskDelay(pdMS_TO_TICKS(ok ? NTP_INTERVAL_MS : NTP_RETRY_MS));
+    // Bez czasu ekran nie ma cyfr - do pierwszej synchronizacji probujemy co minute
+    const uint32_t retry = timeValid() ? NTP_RETRY_MS : NTP_FIRST_RETRY_MS;
+    vTaskDelay(pdMS_TO_TICKS(ok ? NTP_INTERVAL_MS : retry));
   }
 }
 
