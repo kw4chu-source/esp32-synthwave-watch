@@ -26,7 +26,8 @@ constexpr int SCREEN_H = 320;
 constexpr uint32_t FRAME_MS = 90;
 
 // ---- Czas / NTP ----
-constexpr const char* NTP_SERVER = "pool.ntp.org";
+// Czas z bramki ESP-NET (lokalny serwer NTP) - po czas nikt nie wychodzi do internetu
+constexpr const char* NTP_SERVER = "192.168.50.1";
 constexpr const char* TZ_POLAND  = "CET-1CEST,M3.5.0,M10.5.0/3";
 constexpr uint32_t NTP_INTERVAL_MS    = 6UL * 3600UL * 1000UL;  // 6 h
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 10000;
