@@ -13,6 +13,8 @@ Import("env")
 import hashlib
 import shutil
 import struct
+import subprocess
+import sys
 from pathlib import Path
 
 IMAGE_MAGIC = 0xE9
@@ -105,6 +107,11 @@ def after_bin(source, target, env):
     shutil.copyfile(bin_path, out)
     print(f"[post_build] app_desc: {name} {version}; "
           f"{len(data)} B ({len(data) * 100 // ota0_size}% ota_0) -> {out}")
+
+    # bez kabla: jesli Cardputer ma otwarty Upload, obraz trafia od razu do /esp32bin
+    push = Path(env.subst("$PROJECT_DIR")).parent / "cardputer-hub" / "tools" / "push.py"
+    if push.exists():
+        subprocess.run([sys.executable, str(push), str(out), "--quiet"], timeout=120)
 
 
 env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", after_bin)
