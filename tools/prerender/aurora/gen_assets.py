@@ -39,8 +39,8 @@ def main():
             stars.append((x, y, int(70 + srng.random() ** 2 * 170), int(srng.integers(0, 256))))
 
     radii = ((8, 0.6), (3, 0.9))
-    lut = hd.neon_lut((60, 210, 150), (110, 235, 180), radii)
-    lut_date = hd.neon_lut((60, 200, 150), (120, 230, 185), ((3, 0.5),))
+    lut = hd.neon_lut((80, 230, 200), (150, 255, 250), radii)
+    lut_date = hd.neon_lut((60, 190, 160), (120, 235, 215), ((3, 0.5),))
     clock = hd.build_clock(hd.font("TiltNeon.ttf", 108), "neon", cy=64, radii=radii)
     date = hd.build_date(hd.font("Rajdhani-Bold.ttf", 22), "neon", baseline=309, radii=((3, 0.5),))
 
