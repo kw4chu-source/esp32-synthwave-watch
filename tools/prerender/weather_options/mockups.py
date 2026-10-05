@@ -28,8 +28,11 @@ sys.modules.pop("gen_assets")
 sys.path.insert(0, str(PRE / "synthwave"))
 import gen_assets as sw  # noqa: E402
 
-sys.path.insert(0, str(PRE / "pixel_options"))
-import mockups as px8  # noqa: E402
+import importlib.util  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("pixel_mockups", PRE / "pixel_options" / "mockups.py")
+px8 = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(px8)
 
 DATE = "PIĄTEK  02.10.2026"
 
