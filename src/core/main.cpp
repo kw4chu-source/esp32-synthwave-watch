@@ -75,8 +75,13 @@ void loop() {
   if (took > worstMs) worstMs = took;
   frames++;
   if (t0 - statsStart >= 10000) {
-    Serial.printf("[FPS] %.1f, najdluzsza klatka %lu ms, heap %u B\n",
-                  frames * 1000.0f / (t0 - statsStart), (unsigned long)worstMs, ESP.getFreeHeap());
+    const auto& s = dmaBuffers.stats;
+    Serial.printf("[FPS] %.1f, najdluzsza klatka %lu ms, heap %u B | na klatke: sklad %.1f ms, czekanie SPI %.1f ms, "
+                  "konwersja %.1f ms, %lu px\n",
+                  frames * 1000.0f / (t0 - statsStart), (unsigned long)worstMs, ESP.getFreeHeap(),
+                  s.composeUs / 1000.0f / frames, s.waitUs / 1000.0f / frames, s.pushUs / 1000.0f / frames,
+                  (unsigned long)(s.pixels / frames));
+    dmaBuffers.resetStats();
     frames = 0;
     worstMs = 0;
     statsStart = t0;

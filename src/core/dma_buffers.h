@@ -18,6 +18,15 @@ public:
   // Wyslij w ostatnio pobranym buforze prostokat w x h (w*h <= CAPACITY_PX)
   void push(int x, int y, int w, int h);
 
+  // Pomiar (mikrosekundy, sumy od ostatniego resetStats):
+  //  compose = skladanie pikseli, wait = czekanie na koniec poprzedniego DMA,
+  //  push = wywolanie pushImageDMA (konwersja 565 -> 666 robi CPU)
+  struct Stats {
+    uint32_t composeUs, waitUs, pushUs, pixels;
+  };
+  Stats stats = {};
+  void resetStats() { stats = {}; }
+
 private:
   LGFX* _lcd = nullptr;
   uint16_t* _buf[2] = {nullptr, nullptr};

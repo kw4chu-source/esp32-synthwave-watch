@@ -14,7 +14,13 @@ constexpr int PIN_TFT_SCLK = 18;
 constexpr int PIN_TFT_MISO = 19;
 constexpr int PIN_TFT_BL   = 32;   // aktywne HIGH, bez PWM
 
+// ESP32 dzieli 80 MHz calkowicie: 27 MHz w praktyce = 26.67 MHz (80/3).
+// Srodowiska testowe moga nadpisac flaga -DTFT_SPI_WRITE_HZ_OVERRIDE=40000000.
+#ifdef TFT_SPI_WRITE_HZ_OVERRIDE
+constexpr uint32_t TFT_SPI_WRITE_HZ = TFT_SPI_WRITE_HZ_OVERRIDE;
+#else
 constexpr uint32_t TFT_SPI_WRITE_HZ = 27000000;  // zweryfikowane na sprzecie
+#endif
 constexpr uint32_t TFT_SPI_READ_HZ  = 16000000;
 
 // ---- Geometria (landscape 480x320) ----

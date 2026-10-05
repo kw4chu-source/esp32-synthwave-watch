@@ -4,6 +4,8 @@
 // w*h pikseli w kolejnosci swap565 (px::swap).
 
 #include "config.h"
+#include <esp_timer.h>
+
 #include "core/dma_buffers.h"
 
 template <class Compose>
@@ -17,7 +19,9 @@ void pushComposed(int x, int y, int w, int h, Compose&& compose) {
   for (int y0 = y; y0 < y + h; y0 += rowsPerChunk) {
     const int rows = (y0 + rowsPerChunk <= y + h) ? rowsPerChunk : (y + h - y0);
     uint16_t* buf = dmaBuffers.acquire();
+    const int64_t t0 = esp_timer_get_time();
     compose(x, y0, w, rows, buf);
+    dmaBuffers.stats.composeUs += uint32_t(esp_timer_get_time() - t0);
     dmaBuffers.push(x, y0, w, rows);
   }
 }
