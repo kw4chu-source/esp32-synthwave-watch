@@ -70,20 +70,7 @@ burza, śnieg, mgła.
 
 ## Cały system
 
-```mermaid
-flowchart LR
-  OWM[(OpenWeather)] -- co 15 min --> GW
-  NTP[(pool.ntp.org)] --> GW
-  subgraph DOM["Dom"]
-    ROUTER[Router domowy] --- GW["Bramka ESP-NET<br/>ESP32 z anteną<br/>NAT + kaganiec ruchu<br/>NTP + pogoda (UDP)"]
-    GW -- "Wi-Fi ESP-NET" --> WATCH["Zegarek<br/>ESP32 + ILI9488"]
-    GW -- "Wi-Fi ESP-NET" --> ADV["Cardputer ADV<br/>hub: Flasher / Upload"]
-    ADV -- "ESP-NOW + AP<br/>wgrywanie tarcz" --> WATCH
-    LAPTOP[Laptop] -- "upload .bin" --> GW
-  end
-  ADV -. "poza domem:<br/>hotspot + WireGuard" .-> VPS[(VPS)]
-  LAPTOP -. "SSH" .-> VPS
-```
+![Cały system](docs/img/system.png)
 
 - **Bramka ESP-NET** (osobny ESP32 z anteną) jako jedyna rozmawia z routerem
   domowym. Ma limity nowych połączeń i pakietów („kaganiec”), żeby projekty
