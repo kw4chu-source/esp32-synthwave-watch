@@ -6,6 +6,8 @@
 
 using namespace assets;
 
+constexpr int FOG_TOP = 200;
+
 namespace scene {
 
 State st;
@@ -18,9 +20,12 @@ struct DateChar {
 };
 DateChar dateChars[MAX_DATE_CHARS];
 int dateLen = 0;
+DateChar tempChars[8];
+int tempLen = 0;
 
 const uint16_t RAIN_COLOR = px::rgb565(170, 195, 230);
 constexpr uint8_t RAIN_ALPHA = 140;
+const uint16_t SNOW_COLOR = px::rgb565(235, 240, 255);
 
 // Swiatlo neonu dodawane do tla z nasyceniem, z ditheringiem Bayera
 inline uint16_t addLight(uint16_t p, const uint8_t a[3], int x, int y) {
@@ -97,9 +102,28 @@ void setDate(const char* utf8) {
   dateLen = n;
 }
 
+void setTemp(const char* utf8) {
+  int cps[8], n = 0, width = 0;
+  for (const char* p = utf8; *p && n < 8;) {
+    cps[n] = decodeUtf8(p);
+    for (int g = 0; g < WX_TEMP_GLYPH_COUNT; g++)
+      if (WX_TEMP_GLYPHS[g].cp == cps[n]) width += WX_TEMP_GLYPHS[g].adv;
+    n++;
+  }
+  int x = WX_TEMP_CENTER_X - width / 2;
+  for (int i = 0; i < n; i++) {
+    int8_t gi = -1;
+    for (int g = 0; g < WX_TEMP_GLYPH_COUNT; g++)
+      if (WX_TEMP_GLYPHS[g].cp == cps[i]) gi = g;
+    tempChars[i] = {int16_t(x), gi};
+    if (gi >= 0) x += WX_TEMP_GLYPHS[gi].adv;
+  }
+  tempLen = n;
+}
+
 void dropBounds(const Drop& d, int& x0, int& y0, int& x1, int& y1) {
-  x1 = int(d.x) + 1;
-  x0 = int(d.x - d.len * DROP_SLOPE) - 1;
+  x1 = int(d.x) + 2;
+  x0 = int(d.x - d.len * st.slope) - 1;
   y0 = int(d.y);
   y1 = int(d.y) + d.len + 1;
 }
@@ -115,6 +139,17 @@ void compose(int x0, int y0, int w, int h, uint16_t* out) {
       for (int i = 0; i < w; i++) dst[i] = src[(x0 + i + s + SCREEN_W) % SCREEN_W];
     } else {
       memcpy(dst, src + x0, w * 2);
+    }
+  }
+
+  // 1b. mgla nad ulica (gdy sucho)
+  if (st.fog && y0 + h > FOG_TOP && y0 <= STREET_Y) {
+    for (int y = (y0 > FOG_TOP ? y0 : FOG_TOP); y < y0 + h && y <= STREET_Y; y++) {
+      const float f = float(y - FOG_TOP) / (STREET_Y - FOG_TOP);
+      const float k = f * sqrtf(f) * 0.6f;
+      const uint8_t c[3] = {uint8_t(30 * k), uint8_t(20 * k), uint8_t(45 * k)};
+      uint16_t* row = out + (y - y0) * w;
+      for (int i = 0; i < w; i++) row[i] = addLight(row[i], c, x0 + i, y);
     }
   }
 
@@ -134,6 +169,18 @@ void compose(int x0, int y0, int w, int h, uint16_t* out) {
       for (int x = HOLO_X0; x < HOLO_X1; x++)
         if (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h)
           out[(y - y0) * w + x - x0] = addLight(out[(y - y0) * w + x - x0], SCAN, x, y);
+  }
+
+  // 3b. szyld pogody: ikona + temperatura
+  if (y0 < HOLO_Y1 && y0 + h > HOLO_Y0 && x0 < HOLO_X1 && x0 + w > HOLO_X0) {
+    if (st.wxIcon >= 0)
+      drawNeon(WX_ICONS[st.wxIcon], WX_ICON_SIZE, WX_ICON_SIZE, WX_ICON_X, WX_ICON_Y, LUT_WX, x0, y0, w, h, out);
+    for (int i = 0; i < tempLen; i++) {
+      if (tempChars[i].glyph < 0) continue;
+      const DateGlyph& g = WX_TEMP_GLYPHS[tempChars[i].glyph];
+      drawNeon(WX_TEMP_DATA + g.offset, g.w, g.h, tempChars[i].x + g.xoff, WX_TEMP_BASELINE + g.yoff, LUT_WX, x0, y0,
+               w, h, out);
+    }
   }
 
   // 4. latajace auto
@@ -173,17 +220,37 @@ void compose(int x0, int y0, int w, int h, uint16_t* out) {
     }
   }
 
-  // 7. deszcz (na wierzchu wszystkiego)
-  for (int i = 0; i < DROP_COUNT; i++) {
+  // 7. deszcz albo snieg (na wierzchu wszystkiego)
+  for (int i = 0; i < st.dropCount; i++) {
     const Drop& d = st.drops[i];
     int bx0, by0, bx1, by1;
     dropBounds(d, bx0, by0, bx1, by1);
     if (bx1 < x0 || bx0 >= x0 + w || by1 < y0 || by0 >= y0 + h) continue;
+    if (st.snow) {
+      for (int yy = int(d.y); yy < int(d.y) + 2; yy++)
+        for (int xx = int(d.x); xx < int(d.x) + 2; xx++)
+          if (xx >= x0 && xx < x0 + w && yy >= y0 && yy < y0 + h) out[(yy - y0) * w + xx - x0] = SNOW_COLOR;
+      continue;
+    }
     for (int k = 0; k < d.len; k++) {
-      const int x = int(d.x - k * DROP_SLOPE), y = int(d.y) + k;
+      const int x = int(d.x - k * st.slope), y = int(d.y) + k;
       if (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) {
         uint16_t& p = out[(y - y0) * w + x - x0];
         p = px::blend(p, RAIN_COLOR, RAIN_ALPHA);
+      }
+    }
+  }
+
+  // 7b. piorun (tylko w trakcie blysku)
+  if (st.flash && st.bolt) {
+    static const uint8_t BOLT[3] = {200, 210, 255};
+    for (int k = 0; k + 1 < BOLT_POINTS; k++) {
+      const int ya = k * 18, yb = (k + 1) * 18;
+      for (int y = ya; y < yb; y++) {
+        const int x = st.boltX[k] + (st.boltX[k + 1] - st.boltX[k]) * (y - ya) / 18;
+        for (int dx = -1; dx <= 1; dx++)
+          if (x + dx >= x0 && x + dx < x0 + w && y >= y0 && y < y0 + h)
+            out[(y - y0) * w + x + dx - x0] = addLight(out[(y - y0) * w + x + dx - x0], BOLT, x + dx, y);
       }
     }
   }

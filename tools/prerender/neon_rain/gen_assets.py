@@ -106,15 +106,20 @@ def sky(img):
         img[y] = c
 
 
-def buildings(img, top_range, w_range, color, win_colors, density, seed, windows_out=None):
+def buildings(img, top_range, w_range, color, win_colors, density, seed, windows_out=None, mask_out=None):
     r = random.Random(seed)
     x = -10
     while x < W:
         bw = r.randint(*w_range)
         top = r.randint(*top_range)
         img[top:STREET_Y, max(0, x):min(W, x + bw)] = color
+        if mask_out is not None:
+            mask_out[top:STREET_Y, max(0, x):min(W, x + bw)] = 1
         if r.random() < 0.25 and 0 <= x + bw // 2 < W:
-            img[top - r.randint(6, 18):top, x + bw // 2] = color
+            ant = r.randint(6, 18)
+            img[top - ant:top, x + bw // 2] = color
+            if mask_out is not None:
+                mask_out[top - ant:top, x + bw // 2] = 1
         for wy in range(top + 6, STREET_Y - 6, 7):
             for wx in range(x + 4, x + bw - 4, 6):
                 if 0 <= wx < W - 3 and r.random() < density:
@@ -179,18 +184,80 @@ def street(img, rnd):
         img[STREET_Y + 1:] += (m[..., None] * np.array(rgb, np.float32) * k)[:H - STREET_Y - 1]
 
 
-def build_background():
+def outline(img, mask, rgb, core=0.9):
+    """Jasny neonowy kontur sylwetki (gora i boki; dol to ulica) - czytelny z daleka."""
+    inner = mask.copy()
+    inner[1:] &= mask[:-1]
+    inner[:, 1:] &= mask[:, :-1]
+    inner[:, :-1] &= mask[:, 1:]
+    edge = (mask & ~inner).astype(np.float32)
+    edge[STREET_Y - 1:] = 0
+    add_glow(img, edge, rgb, radii=((5, 0.5), (2, 0.8)), core=core)
+
+
+WX_RGB = (0, 220, 255)
+WX_CORE = (200, 250, 255)
+WX_RADII = ((4, 0.5),)
+WX_ICON = 40                      # komorka ikony pogody (z miejscem na poswiate)
+WX_TEMP_PX = 30
+WX_TEMP_CHARSET = "0123456789-°"
+
+
+def weather_sign(img):
+    """Szyld pogody w miejscu hologramu: ramka + podpis (stale), ikona i temperatura na ESP32."""
+    x0, y0, x1, y1 = HOLO_BOX
+    img[y0:y1, x0:x1] = img[y0:y1, x0:x1] * 0.3 + np.array([2, 10, 14]) * 0.7
+    m = Image.new("L", (W, H), 0)
+    d = ImageDraw.Draw(m)
+    d.rounded_rectangle([x0 - 2, y0 - 2, x1 + 1, y1 + 1], radius=6, outline=255, width=1)
+    d.text(((x0 + x1) // 2, y0 + 98), "CZĘST.", font=font("Rajdhani-Bold.ttf", 11), fill=170, anchor="mm")
+    add_glow(img, mask_np(m), WX_RGB, radii=((4, 0.5),), core=0.9)
+
+
+def neon_from_mask(core, radii):
+    imax = sum(k for _, k in radii) * 1.6
+    glow = np.clip(glow_intensity(core, radii) / imax, 0, 1)
+    return (q4(core) << 4) | q4(np.sqrt(glow))
+
+
+def build_weather():
+    import sys as _sys
+    _sys.path.insert(0, str(HERE.parent))
+    import weather_icons as wi
+    icons = [neon_from_mask(wi.icon_mask(k, WX_ICON, WX_ICON, 15, 2), WX_RADII) for k in wi.ICON_NAMES]
+    f = font("TiltNeon.ttf", WX_TEMP_PX)
+    asc, _ = f.getmetrics()
+    glyphs = []
+    for ch in WX_TEMP_CHARSET:
+        bb = f.getbbox(ch)
+        p = 5
+        w, h = bb[2] - bb[0] + 2 * p, bb[3] - bb[1] + 2 * p
+        glyphs.append(dict(cp=ord(ch), w=w, h=h, xoff=bb[0] - p, yoff=bb[1] - asc - p,
+                           adv=int(round(f.getlength(ch))), data=neon_glyph(f, ch, w, h, p - bb[0], p - bb[1], WX_RADII)))
+    return icons, glyphs, asc
+
+
+def build_background(outlines=True, hologram_on=False):
     rnd = random.Random(2077)
     img = np.zeros((H, W, 3), np.float32)
     sky(img)
+    back = np.zeros((H, W), bool)
     buildings(img, (110, 175), (22, 48), (16, 11, 34),
-              [(42, 42, 84), (63, 35, 77), (28, 63, 84)], 0.18, seed=1)
+              [(42, 42, 84), (63, 35, 77), (28, 63, 84)], 0.18, seed=1, mask_out=back)
+    if outlines:
+        outline(img, back, (70, 120, 230), core=0.6)
     windows = []
+    front = np.zeros((H, W), bool)
     buildings(img, (170, 235), (30, 70), (7, 5, 16),
               [(230, 190, 100), (255, 120, 60), (60, 220, 255), (255, 80, 180)], 0.12, seed=2,
-              windows_out=windows)
+              windows_out=windows, mask_out=front)
+    if outlines:
+        outline(img, front, (255, 60, 200))
     jp_sign(img)
-    hologram(img)
+    if hologram_on:
+        hologram(img)
+    else:
+        weather_sign(img)
     sign_tablet(img)
     street(img, rnd)
     rnd.shuffle(windows)
@@ -351,7 +418,7 @@ def c_array(name, data, ctype="uint8_t", per_line=32, dims=None):
     return f"const {ctype} {name}{dim} = {{\n  " + ",\n  ".join(lines) + "\n};\n"
 
 
-def write_sources(bg, windows, dg, lut_on, lut_dim, date_glyphs, date_base, lut_date, car):
+def write_sources(bg, windows, dg, lut_on, lut_dim, date_glyphs, date_base, lut_date, car, wx):
     OUT_SRC.mkdir(parents=True, exist_ok=True)
     cw, chh, car_c, car_a = car
     x0, y0, x1, y1 = SIGN_BOX
@@ -403,8 +470,18 @@ constexpr int CAR_Y = 7;
 extern const uint16_t CAR_COLOR[CAR_W * CAR_H];
 extern const uint8_t CAR_ALPHA[CAR_W * CAR_H];
 
-// ---- hologram ----
+// ---- szyld pogody (dawny hologram; pas skanowania zostaje) ----
 constexpr int HOLO_X0 = {HOLO_BOX[0]}, HOLO_Y0 = {HOLO_BOX[1]}, HOLO_X1 = {HOLO_BOX[2]}, HOLO_Y1 = {HOLO_BOX[3]};
+// ikony: 0 slonce, 1 noc, 2 chmury, 3 deszcz, 4 snieg, 5 burza, 6 mgla (format jak cyfry)
+constexpr int WX_ICON_SIZE = {WX_ICON}, WX_ICON_COUNT = {len(wx[0])};
+constexpr int WX_ICON_X = {(HOLO_BOX[0] + HOLO_BOX[2]) // 2 - WX_ICON // 2}, WX_ICON_Y = {HOLO_BOX[1] + 26 - WX_ICON // 2};
+extern const uint8_t WX_ICONS[WX_ICON_COUNT][WX_ICON_SIZE * WX_ICON_SIZE];
+// temperatura (Tilt Neon {WX_TEMP_PX}px): cyfry, minus, stopien
+constexpr int WX_TEMP_GLYPH_COUNT = {len(wx[1])};
+constexpr int WX_TEMP_CENTER_X = {(HOLO_BOX[0] + HOLO_BOX[2]) // 2}, WX_TEMP_BASELINE = {HOLO_BOX[1] + 72 + 11};
+extern const DateGlyph WX_TEMP_GLYPHS[WX_TEMP_GLYPH_COUNT];
+extern const uint8_t WX_TEMP_DATA[];
+extern const uint8_t LUT_WX[256][3];
 
 }}  // namespace assets
 """
@@ -430,6 +507,20 @@ constexpr int HOLO_X0 = {HOLO_BOX[0]}, HOLO_Y0 = {HOLO_BOX[1]}, HOLO_X1 = {HOLO_
     cpp.append("const char* const WEEKDAYS[7] = {" + ", ".join(f'"{d}"' for d in WEEKDAYS) + "};\n")
     cpp.append("const Window WINDOWS[WINDOW_COUNT] = {\n" + "\n".join(
         f"  {{{x}, {y}, {rgb565(*lit)}, {rgb565(*dark)}}}," for x, y, lit, dark in windows) + "\n};\n")
+    icons, tglyphs, _ = wx
+    cpp.append("const uint8_t WX_ICONS[WX_ICON_COUNT][WX_ICON_SIZE * WX_ICON_SIZE] = {")
+    for ic in icons:
+        cpp.append("  {" + ",".join(map(str, ic.flatten())) + "},")
+    cpp.append("};\n")
+    entries, tdata, toff = [], [], 0
+    for g in tglyphs:
+        entries.append(f"  {{{g['cp']}, {g['w']}, {g['h']}, {g['xoff']}, {g['yoff']}, {g['adv']}, {toff}}},")
+        flat = g["data"].flatten()
+        tdata.extend(flat)
+        toff += len(flat)
+    cpp.append("const DateGlyph WX_TEMP_GLYPHS[WX_TEMP_GLYPH_COUNT] = {\n" + "\n".join(entries) + "\n};\n")
+    cpp.append(c_array("WX_TEMP_DATA", tdata, dims="[]"))
+    cpp.append(c_array("LUT_WX", [v for e in neon_lut(WX_RGB, WX_CORE, WX_RADII) for v in e], dims="[256][3]"))
     cpp.append(c_array("CAR_COLOR", car_c, "uint16_t", 16))
     cpp.append(c_array("CAR_ALPHA", car_a))
     cpp.append("}  // namespace assets")
@@ -449,7 +540,7 @@ def main():
     lut_date = neon_lut(DATE_RGB, DATE_CORE, DATE_RADII)
     car = build_car()
 
-    nbytes = write_sources(bg, windows, dg, lut_on, lut_dim, date_glyphs, date_base, lut_date, car)
+    nbytes = write_sources(bg, windows, dg, lut_on, lut_dim, date_glyphs, date_base, lut_date, car, build_weather())
 
     OUT_PREVIEW.mkdir(exist_ok=True)
     p = preview(bg, dg, lut_on, date_glyphs, date_base, random.Random(7))

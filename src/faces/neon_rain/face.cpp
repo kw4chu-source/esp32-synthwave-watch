@@ -6,6 +6,8 @@
 //  - co kilka minut losowa cyfra "brzeczy" (przygasa na chwile)
 //  - okna gasna/zapalaja sie, pas skanowania hologramu, falujace odbicia
 //  - co 40-70 s przelatuje auto; o pelnej godzinie blyska burza
+//  - pogoda z bramki: szyld z ikona i temperatura; deszcz tylko gdy pada
+//    (sila wg mm/h), snieg, mgla gdy sucho, burza = blyski z piorunem
 
 #include "core/face.h"
 
@@ -14,6 +16,7 @@
 #include <string.h>
 
 #include "core/push.h"
+#include "core/weather.h"
 #include "scene.h"
 
 using namespace assets;
@@ -45,6 +48,9 @@ uint32_t nextBuzzMs = 0;
 uint32_t nextCarMs = 0;
 uint32_t frameNo = 0;
 uint8_t flashStep = 0;
+uint32_t wxSerial = 0xFFFFFFFF;
+bool wxValid = false, storm = false;
+uint32_t nextStormMs = 0;
 
 constexpr uint8_t FLASH_SEQ[] = {200, 0, 0, 140, 0};
 
@@ -56,10 +62,69 @@ void pushDate() { pushScene(70, DATE_BAND_TOP, SCREEN_W - 140, DATE_BAND_BOTTOM 
 uint32_t rnd(uint32_t n) { return esp_random() % n; }
 
 void respawnDrop(scene::Drop& d, bool anywhere) {
-  d.len = 9 + rnd(9);
-  d.vy = 13 + rnd(5);
+  if (st.snow) {
+    d.len = 2;
+    d.vy = 1.5f + rnd(15) / 10.0f;
+  } else {
+    d.len = 9 + rnd(9);
+    d.vy = storm ? 16 + rnd(5) : 13 + rnd(5);
+  }
   d.x = float(rnd(SCREEN_W + 40));
   d.y = anywhere ? float(rnd(SCREEN_H)) - 20 : -float(d.len + rnd(40));
+}
+
+// ---- pogoda
+void applyWeather(const weather::Data& d) {
+  using weather::Kind;
+  const Kind k = d.valid ? d.kind : Kind::None;
+  storm = k == Kind::Storm;
+  st.snow = k == Kind::Snow;
+  st.slope = st.snow ? 0.0f : (storm ? 0.45f : 0.22f);
+  st.fog = d.valid && !(k == Kind::Rain || k == Kind::Snow || k == Kind::Storm);
+  if (!d.valid) st.dropCount = 70;  // bez danych: klasyczny deszcz
+  else if (k == Kind::Rain) st.dropCount = d.intensity == 1 ? 35 : (d.intensity == 2 ? 70 : 110);
+  else if (k == Kind::Storm) st.dropCount = scene::MAX_DROPS;
+  else if (k == Kind::Snow) st.dropCount = d.intensity == 1 ? 40 : (d.intensity == 2 ? 70 : 100);
+  else st.dropCount = 0;
+  for (int i = 0; i < st.dropCount; i++) respawnDrop(st.drops[i], true);
+  switch (k) {
+    case Kind::Clear: st.wxIcon = d.day ? 0 : 1; break;
+    case Kind::Clouds: st.wxIcon = 2; break;
+    case Kind::Rain: st.wxIcon = 3; break;
+    case Kind::Snow: st.wxIcon = 4; break;
+    case Kind::Storm: st.wxIcon = 5; break;
+    case Kind::Fog: st.wxIcon = 6; break;
+    default: st.wxIcon = -1; break;
+  }
+  char t[12] = "";
+  if (d.valid) {
+    weather::formatTemp(d, t, sizeof(t));
+    strlcat(t, "\xC2\xB0", sizeof(t));
+  }
+  scene::setTemp(t);
+  pushScene(0, 0, SCREEN_W, SCREEN_H);
+}
+
+void stepWeather(uint32_t nowMs) {
+  if (frameNo % 50 == 1) {
+    const weather::Data d = weather::get();
+    if (d.valid != wxValid || (d.valid && d.serial != wxSerial)) {
+      wxValid = d.valid;
+      wxSerial = d.serial;
+      applyWeather(d);
+    }
+  }
+  // burza: blysk z piorunem co 15-45 s
+  if (storm && !flashStep && int32_t(nowMs - nextStormMs) >= 0) {
+    nextStormMs = nowMs + 15000 + rnd(30000);
+    int x = 60 + rnd(SCREEN_W - 120);
+    for (auto& bx : st.boltX) {
+      bx = int16_t(x);
+      x += int(rnd(29)) - 14;
+    }
+    st.bolt = true;
+    flashStep = 1;
+  }
 }
 
 // ---- cyfry
@@ -119,17 +184,17 @@ void updateClock(uint32_t nowMs, const struct tm* now) {
 
 // ---- tlo
 void stepRain() {
-  int ox0[scene::DROP_COUNT], oy0[scene::DROP_COUNT], ox1[scene::DROP_COUNT],
-      oy1[scene::DROP_COUNT];
-  for (int i = 0; i < scene::DROP_COUNT; i++) {
+  int ox0[scene::MAX_DROPS], oy0[scene::MAX_DROPS], ox1[scene::MAX_DROPS], oy1[scene::MAX_DROPS];
+  for (int i = 0; i < st.dropCount; i++) {
     scene::Drop& d = st.drops[i];
     scene::dropBounds(d, ox0[i], oy0[i], ox1[i], oy1[i]);
     d.y += d.vy;
-    d.x -= d.vy * scene::DROP_SLOPE;
+    d.x -= d.vy * st.slope;
+    if (st.snow && (esp_random() & 3) == 0) d.x += float(int(esp_random() % 3) - 1);
     if (d.y > SCREEN_H) respawnDrop(d, false);
   }
   // najpierw caly nowy stan, potem wysylka (stary + nowy obszar kazdej smugi)
-  for (int i = 0; i < scene::DROP_COUNT; i++) {
+  for (int i = 0; i < st.dropCount; i++) {
     int x0, y0, x1, y1;
     scene::dropBounds(st.drops[i], x0, y0, x1, y1);
     if (oy0[i] > y1 + 40 || oy1[i] < y0 - 40) {  // respawn: dwa osobne prostokaty
@@ -180,7 +245,10 @@ void stepFlash() {
   if (!flashStep) return;
   st.flash = FLASH_SEQ[flashStep - 1];
   pushScene(0, 0, SCREEN_W, SCREEN_H);
-  if (++flashStep > sizeof(FLASH_SEQ)) flashStep = 0;
+  if (++flashStep > sizeof(FLASH_SEQ)) {
+    flashStep = 0;
+    st.bolt = false;
+  }
 }
 
 }  // namespace
@@ -201,6 +269,7 @@ void frame(uint32_t nowMs, const struct tm* now) {
   stepCar(nowMs);
   stepRipple();
   stepRain();
+  stepWeather(nowMs);
   stepFlash();
 }
 

@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include "core/pixel.h"
+#include "faces/common_hd/hd.h"
 
 using namespace assets;
 
@@ -74,13 +75,80 @@ void Scene::setDate(const char* utf8) {
     width += g >= 0 ? DATE_GLYPHS[g].adv : 0;
     n++;
   }
-  int x = (SCREEN_W - width) / 2;
+  int x = DATE_LEFT_X;  // pogoda zajmuje prawa strone paska
   for (int i = 0; i < n; i++) {
     int g = findDateGlyph(cps[i]);
     _date[i] = {int16_t(x), int8_t(g)};
     if (g >= 0) x += DATE_GLYPHS[g].adv;
   }
   _dateLen = n;
+}
+
+void Scene::setWeatherText(const char* utf8) {
+  int cps[8], n = 0, width = 0;
+  for (const char* p = utf8; *p && n < 8;) {
+    cps[n] = decodeUtf8(p);
+    const int g = findDateGlyph(cps[n]);
+    width += g >= 0 ? DATE_GLYPHS[g].adv : 0;
+    n++;
+  }
+  int x = WX_RIGHT_X - width;
+  _wxIconX = x - WX_ICON_SIZE - 6;
+  for (int i = 0; i < n; i++) {
+    const int g = findDateGlyph(cps[i]);
+    _wx[i] = {int16_t(x), int8_t(g)};
+    if (g >= 0) x += DATE_GLYPHS[g].adv;
+  }
+  _wxLen = n;
+}
+
+void Scene::dropBounds(const Drop& d, int& x0, int& y0, int& x1, int& y1) const {
+  x1 = int(d.x) + 2;
+  x0 = int(d.x - d.len * slope) - 1;
+  y0 = int(d.y);
+  y1 = int(d.y) + d.len + 1;
+}
+
+void Scene::cloudRect(int i, int& x, int& y, int& w, int& h) const {
+  x = clouds[i].x;
+  y = clouds[i].y;
+  w = CLOUD_W[clouds[i].shape];
+  h = CLOUD_H[clouds[i].shape];
+}
+
+void Scene::drawPrecip(int x0, int y0, int w, int h, uint16_t* out) const {
+  static const uint16_t RAIN = px::rgb565(120, 220, 255), SNOW = px::rgb565(240, 235, 255);
+  for (int i = 0; i < dropCount; i++) {
+    const Drop& d = drops[i];
+    int bx0, by0, bx1, by1;
+    dropBounds(d, bx0, by0, bx1, by1);
+    if (bx1 < x0 || bx0 >= x0 + w || by1 < y0 || by0 >= y0 + h) continue;
+    if (snow) {
+      for (int y = int(d.y); y < int(d.y) + 2; y++)
+        for (int x = int(d.x); x < int(d.x) + 2; x++)
+          if (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) out[(y - y0) * w + x - x0] = SNOW;
+      continue;
+    }
+    for (int k = 0; k < d.len; k++) {
+      const int x = int(d.x - k * slope), y = int(d.y) + k;
+      if (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) {
+        uint16_t& p = out[(y - y0) * w + x - x0];
+        p = px::blend(p, RAIN, 150);
+      }
+    }
+  }
+  if (bolt) {
+    static const uint8_t B[3] = {255, 160, 255};
+    for (int k = 0; k + 1 < BOLT_POINTS; k++) {
+      const int ya = k * 19, yb = (k + 1) * 19;
+      for (int y = ya; y < yb; y++) {
+        const int x = boltX[k] + (boltX[k + 1] - boltX[k]) * (y - ya) / 19;
+        for (int dx = -1; dx <= 1; dx++)
+          if (x + dx >= x0 && x + dx < x0 + w && y >= y0 && y < y0 + h)
+            out[(y - y0) * w + x + dx - x0] = hd::addLight(out[(y - y0) * w + x + dx - x0], B, x + dx, y);
+      }
+    }
+  }
 }
 
 uint8_t Scene::starLevel(int i) const {
@@ -144,6 +212,26 @@ void Scene::drawDate(int x0, int y0, int w, int h, uint16_t* out) const {
       }
     }
   }
+  // pogoda po prawej: ikona + temperatura (tym samym kolorem)
+  for (int i = 0; i < _wxLen; i++) {
+    if (_wx[i].glyph < 0) continue;
+    const DateGlyph& g = DATE_GLYPHS[_wx[i].glyph];
+    if (!g.w) continue;
+    const int gx = _wx[i].x + g.xoff, gy = DATE_BASELINE + g.yoff;
+    for (int y = gy > y0 ? gy : y0; y < gy + g.h && y < y0 + h; y++)
+      for (int x = gx > x0 ? gx : x0; x < gx + g.w && x < x0 + w; x++) {
+        const uint8_t a = DATE_ALPHA[g.offset + (y - gy) * g.w + (x - gx)];
+        if (a) out[(y - y0) * w + x - x0] = px::blend(out[(y - y0) * w + x - x0], color, a);
+      }
+  }
+  if (wxIcon >= 0) {
+    const int gx = _wxIconX, gy = DATE_BASELINE - 8 - WX_ICON_SIZE / 2;
+    for (int y = gy > y0 ? gy : y0; y < gy + WX_ICON_SIZE && y < y0 + h; y++)
+      for (int x = gx > x0 ? gx : x0; x < gx + WX_ICON_SIZE && x < x0 + w; x++) {
+        const uint8_t a = WX_ICONS[wxIcon][(y - gy) * WX_ICON_SIZE + (x - gx)];
+        if (a) out[(y - y0) * w + x - x0] = px::blend(out[(y - y0) * w + x - x0], color, a);
+      }
+  }
 }
 
 void Scene::compose(int x0, int y0, int w, int h, uint16_t* out) const {
@@ -154,14 +242,23 @@ void Scene::compose(int x0, int y0, int w, int h, uint16_t* out) const {
     uint16_t* line = out + r * w;
 
     uint16_t bg[4];
-    px::ditherRow(SKY_RGB[y], y, bg);
+    uint8_t sky[3];
+    for (int c = 0; c < 3; c++) sky[c] = uint8_t(SKY_RGB[y][c] * skyDim / 255);
+    if (fog && y > 110) {  // mgla gestnieje ku horyzontowi
+      const int f = (y - 110) * (y - 110) * 140 / (110 * 110);
+      static const uint8_t FOG[3] = {120, 90, 150};
+      for (int c = 0; c < 3; c++) sky[c] = uint8_t(sky[c] + (FOG[c] - sky[c]) * f / 255);
+    }
+    px::ditherRow(sky, y, bg);
     for (int i = 0; i < w; i++) line[i] = bg[(x0 + i) & 3];
 
     if (y >= sunTop && y < SUN_CY) {
       const int si = y - sunTop;
       if (!SUN_GAP[sunFrame][si]) {
         uint16_t sc[4];
-        px::ditherRow(SUN_RGB[si], y, sc);
+        uint8_t sun[3];
+        for (int c = 0; c < 3; c++) sun[c] = uint8_t(SUN_RGB[si][c] * skyDim / 255);
+        px::ditherRow(sun, y, sc);
         int xa = SUN_CX - SUN_HALFW[si], xb = SUN_CX + SUN_HALFW[si];
         if (xa < x0) xa = x0;
         if (xb > x0 + w) xb = x0 + w;
@@ -181,6 +278,32 @@ void Scene::compose(int x0, int y0, int w, int h, uint16_t* out) const {
         if (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) out[(y - y0) * w + (x - x0)] = c;
       }
   }
+
+  // chmury: ciemne wypelnienie + neonowa obwodka
+  for (int i = 0; i < cloudCount; i++) {
+    int cx, cy, cw, ch;
+    cloudRect(i, cx, cy, cw, ch);
+    const int xa = cx > x0 ? cx : x0, xb = (cx + cw) < (x0 + w) ? (cx + cw) : (x0 + w);
+    const int ya = cy > y0 ? cy : y0, yb = (cy + ch) < (y0 + h) ? (cy + ch) : (y0 + h);
+    if (xa >= xb || ya >= yb) continue;
+    static const uint16_t FILL = px::rgb565(CLOUD_FILL_R, CLOUD_FILL_G, CLOUD_FILL_B);
+    const uint8_t* data = CLOUD_DATA[clouds[i].shape];
+    for (int y = ya; y < yb; y++)
+      for (int x = xa; x < xb; x++) {
+        const uint8_t v = data[(y - cy) * cw + (x - cx)];
+        if (!v) continue;
+        uint16_t& p = out[(y - y0) * w + x - x0];
+        if (v >> 4) p = px::blend(p, FILL, (v >> 4) * 15);
+        if (v & 15) {
+          const int k = (v & 15) * (v & 15);  // 0..225
+          const uint8_t rim[3] = {uint8_t(CLOUD_RIM_R * k / 225), uint8_t(CLOUD_RIM_G * k / 225),
+                                  uint8_t(CLOUD_RIM_B * k / 225)};
+          p = hd::addLight(p, rim, x, y);
+        }
+      }
+  }
+
+  drawPrecip(x0, y0, w, h, out);
 
   if (y0 < DATE_BOTTOM) drawDate(x0, y0, w, h, out);
 

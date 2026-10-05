@@ -5,6 +5,7 @@
 #include "core/dma_buffers.h"
 #include "core/pixel.h"
 #include "face_config.h"
+#include "scene.h"
 
 namespace grid {
 namespace {
@@ -89,6 +90,7 @@ void render(float scroll) {
         buf[SCREEN_W + x] = horizon1;
       }
     }
+    scene.drawPrecip(0, GRID_TOP + bandTop, SCREEN_W, rows, buf);
     for (int i = 0; i < rows * SCREEN_W; i++) buf[i] = px::swap(buf[i]);
     dmaBuffers.push(0, GRID_TOP + bandTop, SCREEN_W, rows);
   }

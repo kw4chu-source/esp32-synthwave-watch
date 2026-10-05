@@ -46,7 +46,17 @@ constexpr int CAR_Y = 7;
 extern const uint16_t CAR_COLOR[CAR_W * CAR_H];
 extern const uint8_t CAR_ALPHA[CAR_W * CAR_H];
 
-// ---- hologram ----
+// ---- szyld pogody (dawny hologram; pas skanowania zostaje) ----
 constexpr int HOLO_X0 = 430, HOLO_Y0 = 52, HOLO_X1 = 474, HOLO_Y1 = 168;
+// ikony: 0 slonce, 1 noc, 2 chmury, 3 deszcz, 4 snieg, 5 burza, 6 mgla (format jak cyfry)
+constexpr int WX_ICON_SIZE = 40, WX_ICON_COUNT = 7;
+constexpr int WX_ICON_X = 432, WX_ICON_Y = 58;
+extern const uint8_t WX_ICONS[WX_ICON_COUNT][WX_ICON_SIZE * WX_ICON_SIZE];
+// temperatura (Tilt Neon 30px): cyfry, minus, stopien
+constexpr int WX_TEMP_GLYPH_COUNT = 12;
+constexpr int WX_TEMP_CENTER_X = 452, WX_TEMP_BASELINE = 135;
+extern const DateGlyph WX_TEMP_GLYPHS[WX_TEMP_GLYPH_COUNT];
+extern const uint8_t WX_TEMP_DATA[];
+extern const uint8_t LUT_WX[256][3];
 
 }  // namespace assets

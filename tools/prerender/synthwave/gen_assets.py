@@ -62,7 +62,15 @@ STAR_COUNT = 46
 STAR_SEED = 1984
 
 WEEKDAYS = ["NIEDZIELA", "PONIEDZIAŁEK", "WTOREK", "ŚRODA", "CZWARTEK", "PIĄTEK", "SOBOTA"]
-DATE_CHARSET = sorted(set("".join(WEEKDAYS) + "0123456789. "))
+DATE_CHARSET = sorted(set("".join(WEEKDAYS) + "0123456789. -°C"))
+
+# ---- pogoda ----
+DATE_LEFT_X = 22                # data od lewej, pogoda po prawej
+WX_RIGHT_X = W - 22             # prawa krawedz temperatury
+WX_ICON = 26                    # ikona (alpha, kolor daty)
+CLOUD_FILL_RGB = (40, 14, 60)
+CLOUD_RIM_RGB = (255, 70, 200)
+CLOUD_SHAPES = [60, 46]         # "promien" chmur (dwa ksztalty)
 
 
 # ---------------------------------------------------------------- pomocnicze
@@ -321,7 +329,39 @@ def c_array(name, data, ctype="uint8_t", per_line=24):
     return f"const {ctype} {name}[{len(vals)}] = {{\n  " + ",\n  ".join(lines) + "\n};\n"
 
 
-def write_sources(dg, date_atlas, sun, stars):
+def build_weather():
+    """Ikony pogody (alpha) i chmury: bajt = (wypelnienie4 << 4) | obwodka4."""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parents[1]))
+    import weather_icons as wi
+    from PIL import ImageDraw, ImageFilter
+    icons = []
+    for k in wi.ICON_NAMES:  # rysowane x2 i zmniejszane = gladkie krawedzie
+        m = wi.icon_mask(k, WX_ICON * 2, WX_ICON * 2, 20, 4)
+        a = Image.fromarray((m * 255).astype(np.uint8)).resize((WX_ICON, WX_ICON), Image.LANCZOS)
+        icons.append(np.asarray(a, np.uint8))
+    clouds = []
+    for sz in CLOUD_SHAPES:
+        cw, chh = int(2.9 * sz) + 12, int(1.4 * sz) + 12
+        cx, cy = cw / 2, chh / 2 + 0.1 * sz
+        fill = Image.new("L", (cw, chh), 0)
+        rim = Image.new("L", (cw, chh), 0)
+        dfi, dri = ImageDraw.Draw(fill), ImageDraw.Draw(rim)
+        for ox, oy, r in [(-0.8, 0.15, 0.55), (-0.2, -0.25, 0.7), (0.5, 0.0, 0.6), (0.95, 0.25, 0.4)]:
+            bb = [cx + ox * sz - r * sz, cy + oy * sz - r * sz * 0.7, cx + ox * sz + r * sz, cy + oy * sz + r * sz * 0.7]
+            dfi.ellipse(bb, fill=255)
+            dri.ellipse(bb, outline=255, width=2)
+        f = np.asarray(fill, np.float32) / 255
+        inner = np.asarray(fill.filter(ImageFilter.MinFilter(5)), np.float32) / 255
+        rim_core = np.asarray(rim, np.float32) / 255 * (1 - inner)
+        glow = np.asarray(Image.fromarray((rim_core * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(3)),
+                          np.float32) / 255
+        rim_v = np.clip(rim_core + glow * 1.4, 0, 1)
+        clouds.append(((_quant4(f) << 4) | _quant4(np.sqrt(rim_v)), cw, chh))
+    return icons, clouds
+
+
+def write_sources(dg, date_atlas, sun, stars, wx):
     OUT_SRC.mkdir(parents=True, exist_ok=True)
     lut = glyph_lut()
     sky = [gradient(SKY_STOPS, y) for y in range(HORIZON_Y)]
@@ -372,6 +412,19 @@ extern const uint8_t SUN_HALFW[SUN_R];
 extern const uint8_t SUN_RGB[SUN_R][3];
 extern const uint8_t SUN_GAP[SUN_FRAMES][SUN_R];  // 1 = przeciecie (tlo nieba)
 
+// ---- pogoda: data od lewej, ikona + temperatura po prawej ----
+constexpr int DATE_LEFT_X = {DATE_LEFT_X}, WX_RIGHT_X = {WX_RIGHT_X};
+// ikony (alpha, kolor daty): 0 slonce, 1 noc, 2 chmury, 3 deszcz, 4 snieg, 5 burza, 6 mgla
+constexpr int WX_ICON_SIZE = {WX_ICON}, WX_ICON_COUNT = {len(wx[0])};
+extern const uint8_t WX_ICONS[WX_ICON_COUNT][WX_ICON_SIZE * WX_ICON_SIZE];
+// chmury: bajt = (wypelnienie4 << 4) | obwodka4 (neon magenta)
+constexpr int CLOUD_SHAPES = {len(wx[1])};
+constexpr int CLOUD_W[CLOUD_SHAPES] = {{{', '.join(str(c[1]) for c in wx[1])}}};
+constexpr int CLOUD_H[CLOUD_SHAPES] = {{{', '.join(str(c[2]) for c in wx[1])}}};
+extern const uint8_t* const CLOUD_DATA[CLOUD_SHAPES];
+constexpr uint8_t CLOUD_FILL_R = {CLOUD_FILL_RGB[0]}, CLOUD_FILL_G = {CLOUD_FILL_RGB[1]}, CLOUD_FILL_B = {CLOUD_FILL_RGB[2]};
+constexpr uint8_t CLOUD_RIM_R = {CLOUD_RIM_RGB[0]}, CLOUD_RIM_G = {CLOUD_RIM_RGB[1]}, CLOUD_RIM_B = {CLOUD_RIM_RGB[2]};
+
 // ---- gwiazdy ----
 struct Star {{ uint16_t x; uint8_t y, phase, size, bright; }};
 constexpr int STAR_COUNT = {len(stars)};
@@ -409,6 +462,14 @@ extern const Star STARS[STAR_COUNT];
     for m in sun["frames"]:
         cpp.append("  {" + ",".join(map(str, m)) + "},")
     cpp.append("};\n")
+    icons, clouds = wx
+    cpp.append("const uint8_t WX_ICONS[WX_ICON_COUNT][WX_ICON_SIZE * WX_ICON_SIZE] = {")
+    for ic in icons:
+        cpp.append("  {" + ",".join(map(str, ic.flatten())) + "},")
+    cpp.append("};\n")
+    for i, (cd, _, _) in enumerate(clouds):
+        cpp.append(c_array(f"CLOUD_{i}", cd.flatten()))
+    cpp.append("const uint8_t* const CLOUD_DATA[CLOUD_SHAPES] = {" + ", ".join(f"CLOUD_{i}" for i in range(len(clouds))) + "};\n")
     cpp.append("const Star STARS[STAR_COUNT] = {\n" +
                "\n".join(f"  {{{x}, {y}, {p}, {s}, {b}}}," for x, y, p, s, b in stars) + "\n};\n")
     cpp.append("}  // namespace assets")
@@ -426,7 +487,7 @@ def main():
     stars = build_stars(digits_box, sun)
     date_atlas = build_date_atlas()
 
-    nbytes = write_sources(dg, date_atlas, sun, stars)
+    nbytes = write_sources(dg, date_atlas, sun, stars, build_weather())
 
     OUT_PREVIEW.mkdir(exist_ok=True)
     prev = render_preview(dg, date_atlas, sun, stars)

@@ -7,11 +7,11 @@
 #include <time.h>
 
 #include "config.h"
+#include "core/weather.h"
 #include "secrets.h"
 
 namespace {
 
-constexpr uint32_t NTP_RETRY_MS = 10UL * 60UL * 1000UL;  // po porazce: 10 min
 constexpr uint32_t NTP_FIRST_RETRY_MS = 60UL * 1000UL;   // ...albo 1 min, gdy brak czasu
 constexpr uint32_t NTP_SYNC_TIMEOUT_MS = 10000;
 
@@ -31,15 +31,30 @@ bool syncNtp() {
   return true;
 }
 
-void ntpTask(void*) {
+// Jedno polaczenie co NET_INTERVAL_MS: pogoda z bramki zawsze, NTP gdy minelo
+// NTP_INTERVAL_MS albo jeszcze nie ma czasu.
+constexpr uint32_t NET_INTERVAL_MS = 15UL * 60UL * 1000UL;
+
+void netTask(void*) {
+  uint32_t lastNtp = 0;
+  bool ntpOnce = false;
   for (;;) {
     const uint32_t t0 = millis();
-    const bool ok = wifiFetch(syncNtp);
-    Serial.printf("[NTP] %s (%lu ms)\n", ok ? "zsynchronizowano" : "nieudane",
-                  (unsigned long)(millis() - t0));
+    bool ntpOk = false, wxOk = false;
+    const bool ntpDue = !ntpOnce || !timeValid() || millis() - lastNtp > NTP_INTERVAL_MS;
+    const bool connected = wifiFetch([&]() {
+      if (ntpDue) ntpOk = syncNtp();
+      wxOk = weather::query();
+      return true;
+    });
+    if (ntpOk) {
+      ntpOnce = true;
+      lastNtp = millis();
+    }
+    Serial.printf("[NET] wifi %s, NTP %s, pogoda %s (%lu ms)\n", connected ? "OK" : "brak",
+                  ntpDue ? (ntpOk ? "OK" : "nieudane") : "-", wxOk ? "OK" : "brak", (unsigned long)(millis() - t0));
     // Bez czasu ekran nie ma cyfr - do pierwszej synchronizacji probujemy co minute
-    const uint32_t retry = timeValid() ? NTP_RETRY_MS : NTP_FIRST_RETRY_MS;
-    vTaskDelay(pdMS_TO_TICKS(ok ? NTP_INTERVAL_MS : retry));
+    vTaskDelay(pdMS_TO_TICKS(timeValid() ? NET_INTERVAL_MS : NTP_FIRST_RETRY_MS));
   }
 }
 
@@ -69,7 +84,7 @@ bool wifiFetch(const std::function<bool()>& job) {
 void ntpTaskStart() {
   setenv("TZ", TZ_POLAND, 1);
   tzset();
-  xTaskCreatePinnedToCore(ntpTask, "ntp", 4096, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(netTask, "net", 6144, nullptr, 1, nullptr, 0);
 }
 
 bool timeValid() {

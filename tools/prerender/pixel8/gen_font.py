@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 FONT = Path(__file__).resolve().parents[1] / "fonts" / "PressStart2P-Regular.ttf"
 OUT = ROOT / "src" / "faces" / "common_8bit" / "pixel_font_gen.h"
 
-CHARSET = " 0123456789.:/+-%ABCDEFGHIJKLMNOPQRSTUVWXYZĄĆĘŁŃÓŚŹŻ"
+CHARSET = " 0123456789.:/+-%°ABCDEFGHIJKLMNOPQRSTUVWXYZĄĆĘŁŃÓŚŹŻ"
 CELL_H, TOP = 12, 2
 
 
